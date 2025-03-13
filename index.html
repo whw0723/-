@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五子棋</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .control-buttons button {
+            padding: 8px 16px;
+            font-size: 14px;
+            border: none;
+            border-radius: 4px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .control-buttons button:hover {
+            background-color: #45a049;
+        }
+
+        .control-buttons button.active {
+            background-color: #f44336;
+        }
+
+        .control-buttons button.active:hover {
+            background-color: #da190b;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>五子棋</h1>
+        
+        <div class="mode-select">
+            <button id="pvp-btn" class="mode-btn active">双人对战</button>
+            <button id="pve-btn" class="mode-btn">人机对战</button>
+        </div>
+
+        <div class="ai-settings" style="display: none;">
+            <div class="settings-row">
+                <label>选择难度：</label>
+                <select id="difficulty">
+                    <option value="easy">简单</option>
+                    <option value="medium">中等</option>
+                    <option value="hard">困难</option>
+                </select>
+            </div>
+            <div class="settings-row">
+                <label>选择棋子：</label>
+                <div class="piece-select">
+                    <button id="select-black" class="piece-btn active">执黑先行</button>
+                    <button id="select-white" class="piece-btn">执白后行</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div id="current-player">当前玩家: 黑子</div>
+            <div class="control-buttons">
+                <button id="restart-btn">重新开始</button>
+                <button id="new-game-btn">新游戏</button>
+                <button id="sound-btn" class="active">关闭音效</button>
+            </div>
+        </div>
+        
+        <div id="game-board">
+            <!-- 棋盘将由JavaScript动态生成 -->
+        </div>
+    </div>
+    
+    <div id="game-over-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="winner-message"></h2>
+            <button id="new-game-btn">开始新游戏</button>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html> 
