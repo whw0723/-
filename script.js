@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const DIFFICULTY_WEIGHTS = {
         easy: {
             win: 100000,
-            block: 50000,
+            block: 80000,  // 提高阻挡权重
             connect4: 10000,
             connect3: 5000,
             connect2: 1000,
@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         medium: {
             win: 1000000,
-            block: 500000,
+            block: 900000,  // 大幅提高阻挡权重
             connect4: 100000,
             connect3: 50000,
             connect2: 10000,
@@ -41,20 +41,20 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         hard: {
             win: 10000000,
-            block: 5000000,
+            block: 9000000,  // 大幅提高阻挡权重
             connect4: 1000000,
             connect3: 500000,
             connect2: 100000,
             center: 1000,
             pattern: {
-                live_four: 5000000,    // 提高活四权重
-                dead_four: 1000000,    // 提高死四权重
-                live_three: 500000,    // 大幅提高活三权重
-                dead_three: 100000,    // 提高死三权重
-                live_two: 50000,       // 提高活二权重
-                dead_two: 10000,       // 提高死二权重
-                live_one: 5000,        // 提高活一权重
-                dead_one: 1000         // 提高死一权重
+                live_four: 5000000,
+                dead_four: 1000000,
+                live_three: 500000,
+                dead_three: 100000,
+                live_two: 50000,
+                dead_two: 10000,
+                live_one: 5000,
+                dead_one: 1000
             }
         }
     };
@@ -160,21 +160,34 @@ document.addEventListener('DOMContentLoaded', () => {
     // 计算AI移动
     function calculateAIMove() {
         const weights = DIFFICULTY_WEIGHTS[gameState.difficulty];
-        let bestScore = -Infinity;
-        let bestMoves = [];
-
+        
         // 第一步下在中心位置
         if (gameState.board.every(row => row.every(cell => cell === null))) {
             return {x: 7, y: 7};
         }
-
+        
+        // 检查关键位置
+        const criticalMoves = identifyCriticalMoves();
+        if (criticalMoves.length > 0) {
+            // 获取最高优先级的所有走法
+            const topPriority = criticalMoves[0].priority;
+            const topMoves = criticalMoves.filter(move => move.priority === topPriority);
+            
+            // 在最高优先级中随机选择一个走法
+            return topMoves[Math.floor(Math.random() * topMoves.length)];
+        }
+        
+        // 如果没有关键位置，使用评分系统
+        let bestScore = -Infinity;
+        let bestMoves = [];
+        
         // 遍历所有可能的位置
         for (let y = 0; y < BOARD_SIZE; y++) {
             for (let x = 0; x < BOARD_SIZE; x++) {
                 if (!gameState.board[y][x]) {
                     // 只考虑周围有棋子的位置
                     if (!hasAdjacentPiece(x, y)) continue;
-
+                    
                     let score = evaluatePosition(x, y, weights);
                     
                     // 在困难模式下增加棋型识别
@@ -183,17 +196,81 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     
                     if (score > bestScore) {
-                        bestMoves = [{x, y, score}];
+                        bestMoves = [{x, y}];
                         bestScore = score;
                     } else if (score === bestScore) {
-                        bestMoves.push({x, y, score});
+                        bestMoves.push({x, y});
                     }
                 }
             }
         }
-
+        
         // 从最佳移动中随机选择一个
         return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+    }
+
+    // 新增：检查关键位置
+    function identifyCriticalMoves() {
+        const playerColor = gameState.playerColor;
+        const aiColor = playerColor === 'black' ? 'white' : 'black';
+        const criticalMoves = new Map(); // 使用Map存储位置及其优先级
+        
+        // 遍历棋盘找到空位
+        for (let y = 0; y < BOARD_SIZE; y++) {
+            for (let x = 0; x < BOARD_SIZE; x++) {
+                if (!gameState.board[y][x] && hasAdjacentPiece(x, y)) {
+                    let priority = 0;
+                    
+                    // 检查AI获胜
+                    gameState.board[y][x] = aiColor;
+                    if (checkWin(x, y)) {
+                        priority = 100; // 最高优先级：直接获胜
+                    }
+                    gameState.board[y][x] = null;
+                    
+                    // 检查阻止玩家获胜
+                    if (priority === 0) {
+                        gameState.board[y][x] = playerColor;
+                        if (checkWin(x, y)) {
+                            priority = 90; // 次高优先级：阻止玩家获胜
+                        }
+                        gameState.board[y][x] = null;
+                    }
+                    
+                    // 检查AI形成活四或活三
+                    if (priority === 0) {
+                        gameState.board[y][x] = aiColor;
+                        const aiPatterns = checkPatterns(x, y, aiColor);
+                        if (aiPatterns.live_four) {
+                            priority = 80; // 形成活四
+                        } else if (aiPatterns.live_three) {
+                            priority = 70; // 形成活三
+                        }
+                        gameState.board[y][x] = null;
+                    }
+                    
+                    // 检查阻止玩家形成活四或活三
+                    if (priority === 0) {
+                        gameState.board[y][x] = playerColor;
+                        const playerPatterns = checkPatterns(x, y, playerColor);
+                        if (playerPatterns.live_four) {
+                            priority = 85; // 阻止活四比AI形成活四更重要
+                        } else if (playerPatterns.live_three) {
+                            priority = 75; // 阻止活三比AI形成活三更重要
+                        }
+                        gameState.board[y][x] = null;
+                    }
+                    
+                    if (priority > 0) {
+                        criticalMoves.set(`${x},${y}`, {x, y, priority});
+                    }
+                }
+            }
+        }
+        
+        // 按优先级排序
+        return Array.from(criticalMoves.values())
+            .sort((a, b) => b.priority - a.priority);
     }
 
     // 检查是否有相邻的棋子
@@ -232,14 +309,21 @@ document.addEventListener('DOMContentLoaded', () => {
             return weights.block;
         }
 
+        // 检查玩家是否有威胁性棋型（如活四）
+        const playerThreateningPatterns = checkThreateningPatterns(x, y, gameState.playerColor);
+        if (playerThreateningPatterns) {
+            gameState.board[y][x] = null;
+            return weights.block * 0.9; // 稍微低于直接获胜的阻挡权重
+        }
+
         // 恢复空位
         gameState.board[y][x] = null;
 
         // 评估连子情况
         score += evaluateConnection(x, y, aiColor, weights);
         
-        // 评估防守情况（提高防守权重）
-        score += evaluateConnection(x, y, gameState.playerColor, weights) * 1.2;
+        // 评估防守情况（大幅提高防守权重）
+        score += evaluateConnection(x, y, gameState.playerColor, weights) * 1.5;
 
         // 位置价值
         score += calculatePositionValue(x, y, weights);
@@ -257,16 +341,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (aiPatterns.live_one) score += weights.pattern.live_one;
             if (aiPatterns.dead_one) score += weights.pattern.dead_one;
 
-            // 检查玩家的棋型（提高防守权重）
+            // 检查玩家的棋型（大幅提高防守权重）
             const playerPatterns = checkPatterns(x, y, gameState.playerColor);
-            if (playerPatterns.live_four) score += weights.pattern.live_four * 1.2;
-            if (playerPatterns.dead_four) score += weights.pattern.dead_four * 1.2;
-            if (playerPatterns.live_three) score += weights.pattern.live_three * 1.2;
-            if (playerPatterns.dead_three) score += weights.pattern.dead_three * 1.2;
+            if (playerPatterns.live_four) score += weights.pattern.live_four * 1.8;
+            if (playerPatterns.dead_four) score += weights.pattern.dead_four * 1.5;
+            if (playerPatterns.live_three) score += weights.pattern.live_three * 1.8;
+            if (playerPatterns.dead_three) score += weights.pattern.dead_three * 1.5;
             if (playerPatterns.live_two) score += weights.pattern.live_two * 1.2;
             if (playerPatterns.dead_two) score += weights.pattern.dead_two * 1.2;
-            if (playerPatterns.live_one) score += weights.pattern.live_one * 1.2;
-            if (playerPatterns.dead_one) score += weights.pattern.dead_one * 1.2;
+            if (playerPatterns.live_one) score += weights.pattern.live_one * 1.1;
+            if (playerPatterns.dead_one) score += weights.pattern.dead_one * 1.1;
         }
 
         return score;
@@ -438,6 +522,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function getLine(x, y, dx, dy, player) {
         const line = [];
         
+        // 临时在此位置放置一个棋子
+        gameState.board[y][x] = player;
+        
         // 向两个方向检查
         for (let dir = -1; dir <= 1; dir += 2) {
             for (let i = 1; i < 5; i++) {
@@ -453,13 +540,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     line.push('p'); // 同色棋子
                 } else if (gameState.board[ny][nx] === null) {
                     line.push('e'); // 空位
-                    break;
                 } else {
                     line.push('o'); // 对手棋子
                     break;
                 }
             }
         }
+        
+        // 移除临时棋子
+        gameState.board[y][x] = null;
         
         return line;
     }
@@ -477,64 +566,85 @@ document.addEventListener('DOMContentLoaded', () => {
             dead_one: false
         };
         
+        // 将两侧的棋子整合成一个完整的图案
+        const fullLine = ['e', 'p', ...line]; // 中心位置假设有一个己方棋子
+        
+        // 连续棋子计数
+        const pieceCount = fullLine.filter(c => c === 'p').length;
+        
+        // 开端数量（用于判断活棋还是死棋）
+        const openEnds = fullLine.filter(c => c === 'e').length;
+        
         // 检查活四
-        if (line.includes('e') && line.filter(c => c === 'p').length === 4) {
+        if (pieceCount === 5 && openEnds >= 1) {
             pattern.live_four = true;
         }
         
         // 检查死四
-        if (line.filter(c => c === 'p').length === 4 && !line.includes('e')) {
+        if (pieceCount === 5 && openEnds === 0) {
             pattern.dead_four = true;
         }
         
-        // 检查活三（改进活三识别）
-        if (line.includes('e')) {
-            const pieces = line.filter(c => c === 'p');
-            if (pieces.length === 3) {
-                // 检查是否有两个空位
-                const emptyCount = line.filter(c => c === 'e').length;
-                if (emptyCount >= 2) {
+        // 检查活三
+        if (pieceCount === 4 && openEnds >= 2) {
+            // 扩展活三检测：检查是否有两端且足够空间形成活三
+            const emptySpaces = [];
+            for (let i = 0; i < fullLine.length; i++) {
+                if (fullLine[i] === 'e') {
+                    emptySpaces.push(i);
+                }
+            }
+            
+            // 检查空位是否分布在两端
+            if (emptySpaces.length >= 2) {
+                // 检查是否能形成活三（即是否有足够的空间扩展）
+                let hasSpace = false;
+                for (let i = 0; i < emptySpaces.length - 1; i++) {
+                    if (emptySpaces[i+1] - emptySpaces[i] <= 5) {
+                        hasSpace = true;
+                        break;
+                    }
+                }
+                if (hasSpace) {
                     pattern.live_three = true;
                 }
             }
         }
         
         // 检查死三
-        if (line.filter(c => c === 'p').length === 3 && !line.includes('e')) {
+        if (pieceCount === 4 && openEnds === 1) {
             pattern.dead_three = true;
         }
         
-        // 检查活二（改进活二识别）
-        if (line.includes('e')) {
-            const pieces = line.filter(c => c === 'p');
-            if (pieces.length === 2) {
-                // 检查是否有两个空位
-                const emptyCount = line.filter(c => c === 'e').length;
-                if (emptyCount >= 2) {
-                    pattern.live_two = true;
+        // 检查活二
+        if (pieceCount === 3 && openEnds >= 2) {
+            // 扩展活二检测
+            let hasSpace = false;
+            const emptyPositions = [];
+            for (let i = 0; i < fullLine.length; i++) {
+                if (fullLine[i] === 'e') {
+                    emptyPositions.push(i);
                 }
+            }
+            
+            // 检查空位分布
+            if (emptyPositions.length >= 2) {
+                pattern.live_two = true;
             }
         }
         
         // 检查死二
-        if (line.filter(c => c === 'p').length === 2 && !line.includes('e')) {
+        if (pieceCount === 3 && openEnds === 1) {
             pattern.dead_two = true;
         }
         
-        // 检查活一（改进活一识别）
-        if (line.includes('e')) {
-            const pieces = line.filter(c => c === 'p');
-            if (pieces.length === 1) {
-                // 检查是否有两个空位
-                const emptyCount = line.filter(c => c === 'e').length;
-                if (emptyCount >= 2) {
-                    pattern.live_one = true;
-                }
-            }
+        // 检查活一
+        if (pieceCount === 2 && openEnds >= 2) {
+            pattern.live_one = true;
         }
         
         // 检查死一
-        if (line.filter(c => c === 'p').length === 1 && !line.includes('e')) {
+        if (pieceCount === 2 && openEnds === 1) {
             pattern.dead_one = true;
         }
         
@@ -691,6 +801,64 @@ document.addEventListener('DOMContentLoaded', () => {
         const soundBtn = document.getElementById('sound-btn');
         soundBtn.textContent = gameState.soundEnabled ? '关闭音效' : '开启音效';
         soundBtn.classList.toggle('active', gameState.soundEnabled);
+    }
+
+    // 新增：检查是否有威胁性的棋型
+    function checkThreateningPatterns(x, y, player) {
+        // 临时在此位置放置一个棋子
+        gameState.board[y][x] = player;
+        
+        const directions = [
+            [1, 0], // 水平
+            [0, 1], // 垂直
+            [1, 1], // 右下对角线
+            [1, -1] // 右上对角线
+        ];
+        
+        let hasThreat = false;
+        
+        directions.forEach(([dx, dy]) => {
+            // 检查活四
+            let count = 1;
+            let openEnds = 2;
+            
+            // 向两个方向检查
+            for (let dir = -1; dir <= 1; dir += 2) {
+                for (let i = 1; i < 5; i++) {
+                    const nx = x + dx * i * dir;
+                    const ny = y + dy * i * dir;
+                    
+                    if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) {
+                        openEnds--;
+                        break;
+                    }
+                    
+                    if (gameState.board[ny][nx] === player) {
+                        count++;
+                    } else if (gameState.board[ny][nx] === null) {
+                        break;
+                    } else {
+                        openEnds--;
+                        break;
+                    }
+                }
+            }
+            
+            // 活四或者死四
+            if (count >= 4) {
+                hasThreat = true;
+            }
+            
+            // 活三
+            if (count === 3 && openEnds === 2) {
+                hasThreat = true;
+            }
+        });
+        
+        // 恢复空位
+        gameState.board[y][x] = null;
+        
+        return hasThreat;
     }
 
     // 添加事件监听器
